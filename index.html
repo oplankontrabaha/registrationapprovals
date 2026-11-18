@@ -842,6 +842,7 @@ const ICON = {
   pin:'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0zM12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   building:'M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4',
   user:'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  phone:'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z',
   layers:'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   hash:'M4 9h16M4 15h16M10 3 8 21M16 3l-2 18',
   check:'M20 6 9 17l-5-5',
@@ -1002,6 +1003,13 @@ async function copyText(text, what, button) {
     setTimeout(function () { button.classList.remove('done'); button.innerHTML = was; }, 1600);
   }
   toast(ok ? 'Copied ' + what + ': ' + text : 'Could not copy automatically. Select it and copy by hand: ' + text, ok);
+}
+/* The submitter's phone number as a tap-to-call link (works on phones). */
+function telHref(phone) { return 'tel:' + String(phone || '').replace(/[^\d+]/g, ''); }
+function phoneHtml(it) {
+  return it.submitterPhone
+    ? '<a href="' + esc(telHref(it.submitterPhone)) + '" style="color:inherit">' + esc(it.submitterPhone) + '</a>'
+    : '';
 }
 function copyBtn(act, label) { return '<button class="btn mini" type="button" data-act="' + act + '" title="Copy to clipboard">' + svg('copy') + (label || 'Copy') + '</button>'; }
 
@@ -1366,7 +1374,7 @@ function computeView() {
     if (S.check === 'warn' && !flagged(it)) return false;
     if (S.check === 'clear' && flagged(it)) return false;
     if (!q) return true;
-    return [it.name, it.site, it.region, it.regionAbbr, it.submitterEmail, it.ref].join(' ').toLowerCase().indexOf(q) !== -1;
+    return [it.name, it.site, it.region, it.regionAbbr, it.submitterEmail, it.submitterPhone, it.ref].join(' ').toLowerCase().indexOf(q) !== -1;
   });
   const by = {
     oldest: function (a, b) { return (a.appliedMs || 0) - (b.appliedMs || 0); },
@@ -1756,6 +1764,7 @@ function renderDetail(animate) {
     '<div class="dl">' +
       row('building', false, 'Proponent', esc(it.region) + (it.regionAbbr && it.regionAbbr !== it.region ? ' (' + esc(it.regionAbbr) + ')' : '') + '<small>Site: ' + esc(it.site || '—') + '</small>') +
       row('user', true, 'Submitted by', it.submitterEmail ? '<span class="copy-inline"><a href="mailto:' + esc(it.submitterEmail) + '" style="color:inherit">' + esc(it.submitterEmail) + '</a>' + mailBtn(it) + copyBtn('copy-email') + '</span>' : 'No email given<small>Older requests could be filed without one.</small>') +
+      row('phone', false, 'Phone number', it.submitterPhone ? '<span class="copy-inline">' + phoneHtml(it) + copyBtn('copy-phone') + '</span><small>Tap or click to call</small>' : 'Not given<small>Requests filed before phone numbers were collected have none.</small>') +
       row('calendar', true, 'Date & time applied', esc(it.appliedLabel || '—') + '<small>Philippine time · ' + waitingText(it.daysWaiting).toLowerCase() + '</small>') +
       row('mail', false, 'Approval email', it.approverEmailed ? 'Sent to the approver' + (it.approverEmailedAt ? '<small>' + esc(it.approverEmailedAt) + '</small>' : '') : 'Not sent yet<small>The scanner sends it within a minute of filing.</small>') +
       row('pin', false, 'Start (A)', '<span class="mono">' + latlngText(g.start) + '</span>') +
@@ -1768,7 +1777,8 @@ function renderDetail(animate) {
       '<div style="min-width:0"><h3><span>#' + n + '</span>' + esc(it.name) + '</h3>' +
       '<div class="where">' + esc(it.site) + ' · ' + esc(it.region) + ' · ' + modeLabel(it) + ' · ' + waitingText(it.daysWaiting).toLowerCase() + '</div>' +
       '<div class="refline"><span>Ref</span><span class="mono">' + esc(it.ref) + '</span>' + copyBtn('copy-ref') +
-        '<span class="sep">|</span>' + (it.submitterEmail ? '<span>' + esc(it.submitterEmail) + '</span>' + mailBtn(it) + copyBtn('copy-email', 'Copy email') : '<span>No submitter email</span>') + '</div>' +
+        '<span class="sep">|</span>' + (it.submitterEmail ? '<span>' + esc(it.submitterEmail) + '</span>' + mailBtn(it) + copyBtn('copy-email', 'Copy email') : '<span>No submitter email</span>') +
+        (it.submitterPhone ? '<span class="sep">|</span><span>' + phoneHtml(it) + '</span>' + copyBtn('copy-phone', 'Copy phone') : '') + '</div>' +
       '</div></div>' +
     checkPanel(it) +
     '<div class="decide"><div class="decide-top"><span class="tile sm orange">' + svg('shield') + '</span><div><b>Decide on this request</b>' +
@@ -1800,6 +1810,7 @@ $('.side').addEventListener('click', function (e) {
   if (what === 'zoom-both') drawSelected(true, true);
   if (what === 'copy-ref') { const it = current(); copyText(it && it.ref, 'the reference', act); }
   if (what === 'copy-email') { const it = current(); copyText(it && it.submitterEmail, 'the email address', act); }
+  if (what === 'copy-phone') { const it = current(); copyText(it && it.submitterPhone, 'the phone number', act); }
   if (what === 'pick') togglePick(S.sel);
   if (what === 'approve' || what === 'reject') decide(what, '');
   if (what === 'approve-menu') openApproveMenu(act);
@@ -1866,6 +1877,7 @@ function classicProps(it) {
     ['Proponent (region)', esc(it.region) + (it.regionAbbr && it.regionAbbr !== it.region ? ' (' + esc(it.regionAbbr) + ')' : '')],
     ['Site', esc(it.site || '—')],
     ['Submitted by', it.submitterEmail ? '<span class="copy-inline">' + esc(it.submitterEmail) + mailBtn(it) + copyBtn('copy-email') + '</span>' : 'No email given'],
+    ['Phone number', it.submitterPhone ? '<span class="copy-inline">' + phoneHtml(it) + copyBtn('copy-phone') + '</span>' : 'Not given'],
     ['Date & time applied', esc(it.appliedLabel || '—')],
     ['Waiting', waitingText(it.daysWaiting)],
     [g.closed ? 'Area / perimeter' : 'Length', g.closed ? g.areaHa.toFixed(2) + ' ha / ' + fmtKm(g.lengthM) + ' km' : fmtKm(g.lengthM) + ' km'],
@@ -3149,7 +3161,7 @@ function drawRequestPage(x, it, n, total, opts, media, asOf) {
     ['pin', 'START POINT (A)', latlngText(g.start)],
     [g.closed ? 'pond' : 'target', g.closed ? 'SHAPE' : 'END POINT (B)', g.closed ? 'Closed area · the ends meet' : latlngText(g.end)],
     ['hash', 'REFERENCE', it.ref + ' · row ' + it.row + ' of RegisteredWaterways'],
-    ['user', 'SUBMITTED BY', it.submitterEmail || 'No email given']
+    ['user', 'SUBMITTED BY', (it.submitterEmail || 'No email given') + (it.submitterPhone ? ' · ' + it.submitterPhone : '')]
   ];
   details.forEach(function (d, i) {
     const col = i % 2, row = Math.floor(i / 2);
@@ -3420,7 +3432,7 @@ function sampleQueue() {
     return {
       check: sampleCheck(o),
       row: o.row, requestId: 'preview' + o.row, submissionId: 'sample-' + o.row, ref: ('S' + o.row + 'PREV00').slice(0, 8), mode: o.mode, region: o.region, regionAbbr: o.abbr,
-      site: o.site, type: o.type, name: o.name, pointsCount: 0, submitterEmail: o.email || '', appliedMs: ms, appliedLabel: phStamp(ms),
+      site: o.site, type: o.type, name: o.name, pointsCount: 0, submitterEmail: o.email || '', submitterPhone: o.email ? '0917 555 ' + String(1000 + o.row * 37).slice(-4) : '', appliedMs: ms, appliedLabel: phStamp(ms),
       appliedDate: phDate(ms, { month: 'long', day: 'numeric', year: 'numeric' }), appliedTime: phDate(ms, { hour: 'numeric', minute: '2-digit' }),
       daysWaiting: Math.floor(o.ago / D), approverEmailed: o.mailed, approverEmailedAt: o.mailed ? phStamp(ms + 60000).replace(/^(\w{3})\w*/, '$1') : '',
       submitterEmailed: !!o.email, geometry: geo(o.geom)
