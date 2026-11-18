@@ -524,6 +524,18 @@ body.classic .empty p{font-size:12px;color:#333}
 .grid td.act .split .caret{flex-basis:20px;padding:0}
 .grid td.act .split .caret .ic{width:12px;height:12px}
 .grid tr.leaving td{opacity:.35}
+/* Submission = Extension: a yellowish cell so extensions stand out from new registrations. */
+.grid tr.grow td.mode-ext{background:#FFF4C2;color:#6B4E00;font-weight:bold}
+.grid tr.grow:hover td.mode-ext{background:#FCEB9E}
+.grid tr.grow.on td.mode-ext{background:#F6DE7A}
+/* Adjustable column widths: drag the thin handle on the right edge of any header. */
+.grid th .rz{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;z-index:2;touch-action:none}
+.grid th .rz:hover,.grid th .rz.drag{background:linear-gradient(to right,transparent 3px,#3399FF 3px,#3399FF 5px,transparent 5px)}
+.grid.sized{table-layout:fixed;min-width:0}
+.grid.sized th{overflow:hidden;text-overflow:ellipsis}
+.grid.sized td{overflow:hidden;text-overflow:ellipsis}
+.grid.sized td.nm,.grid.sized td.chk-cell{min-width:0;max-width:none}
+body.col-resizing,body.col-resizing *{cursor:col-resize!important;user-select:none!important}
 body.classic .side{position:static;max-height:none;overflow:visible;margin:8px 0 0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:8px;align-items:start}
 body.classic .sidecol{display:flex;flex-direction:column;gap:8px;min-width:0}
 @media(max-width:1000px){body.classic .side{grid-template-columns:minmax(0,1fr)}body.classic .sidecol{display:contents}}
@@ -1474,7 +1486,7 @@ function renderList(silent) {
           '<td>' + esc(it.region) + (it.regionAbbr && it.regionAbbr !== it.region ? ' (' + esc(it.regionAbbr) + ')' : '') + '</td>' +
           '<td>' + esc(it.site) + '</td>' +
           '<td>' + esc(it.type || '—') + (g.closed ? ' (area)' : '') + '</td>' +
-          '<td>' + (it.mode === 'EXTENSION' ? 'Extension' : 'New') + '</td>' +
+          (it.mode === 'EXTENSION' ? '<td class="mode-ext">Extension</td>' : '<td>New</td>') +
           '<td>' + esc(when) + '</td>' +
           '<td class="num' + (d >= 14 ? ' late' : d >= 7 ? ' slow' : '') + '">' + (d == null ? '—' : d === 0 ? 'Today' : plural(d, 'day')) + '</td>' +
           '<td class="num">' + (g.closed ? g.areaHa.toFixed(2) + ' ha' : fmtKm(g.lengthM) + ' km') + '</td>' +
@@ -1484,6 +1496,7 @@ function renderList(silent) {
           '<button class="btn approve caret" type="button" data-act="approve-menu" aria-haspopup="menu" aria-label="More approval options" title="Approve with a new name">' + svg('chevron') + '</button></span> ' +
           '<button class="btn reject" type="button" data-act="reject">Reject</button></td></tr>';
       }).join('') + '</tbody></table>';
+    prepareColumnResize(box.querySelector('table.grid'));
     return;
   }
   box.innerHTML = S.view.map(function (it, i) {
@@ -1514,7 +1527,89 @@ function renderList(silent) {
   }).join('');
 }
 
+/* ---------------------------------------------------------------------
+   ADJUSTABLE COLUMN WIDTHS (Simple view table)
+   Drag the right edge of any column header to widen or narrow it.
+   Double-click that edge to put every column back to its automatic width.
+   Widths are kept in this browser, so they survive refreshes and the
+   automatic reload of the list.
+   --------------------------------------------------------------------- */
+const COLW_KEY = 'okb.queue.colWidths.v1';
+const COLW_MIN = 32;
+
+function loadColWidths() {
+  try { const a = JSON.parse(localStorage.getItem(COLW_KEY) || 'null'); return Array.isArray(a) ? a : null; } catch (_) { return null; }
+}
+function saveColWidths(widths) {
+  try { widths ? localStorage.setItem(COLW_KEY, JSON.stringify(widths)) : localStorage.removeItem(COLW_KEY); } catch (_) {}
+}
+function fixColumnWidths(table, widths) {
+  let group = table.querySelector('colgroup');
+  if (!group) { group = document.createElement('colgroup'); table.insertBefore(group, table.firstChild); }
+  if (group.children.length !== widths.length) group.innerHTML = widths.map(function () { return '<col>'; }).join('');
+  widths.forEach(function (w, i) { group.children[i].style.width = w + 'px'; });
+  table.style.width = widths.reduce(function (a, b) { return a + b; }, 0) + 'px';
+  table.classList.add('sized');
+}
+function prepareColumnResize(table) {
+  if (!table || !table.tHead) return;
+  const heads = table.tHead.rows[0].cells;
+  for (let i = 0; i < heads.length; i++) {
+    const handle = document.createElement('span');
+    handle.className = 'rz';
+    handle.setAttribute('data-col', String(i));
+    handle.title = 'Drag to resize this column. Double-click to reset all columns.';
+    heads[i].appendChild(handle);
+  }
+  const saved = loadColWidths();
+  if (saved && saved.length === heads.length) fixColumnWidths(table, saved);
+}
+
+$('#list').addEventListener('pointerdown', function (e) {
+  const handle = e.target.closest('.grid th .rz');
+  if (!handle || e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const table = handle.closest('table');
+  const heads = table.tHead.rows[0].cells;
+  /* Freeze every column at its current on-screen width, then move only one. */
+  const widths = Array.prototype.map.call(heads, function (th) { return Math.max(COLW_MIN, Math.round(th.getBoundingClientRect().width)); });
+  const col = Number(handle.getAttribute('data-col'));
+  const startX = e.clientX;
+  const startW = widths[col];
+  fixColumnWidths(table, widths);
+  handle.classList.add('drag');
+  document.body.classList.add('col-resizing');
+  function move(ev) {
+    widths[col] = Math.max(COLW_MIN, Math.round(startW + ev.clientX - startX));
+    /* The list may have refreshed mid-drag; always resize the table on screen now. */
+    const current = $('#list table.grid');
+    if (current) fixColumnWidths(current, widths);
+  }
+  function stop() {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', stop);
+    window.removeEventListener('pointercancel', stop);
+    handle.classList.remove('drag');
+    document.body.classList.remove('col-resizing');
+    saveColWidths(widths);
+  }
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', stop);
+  window.addEventListener('pointercancel', stop);
+});
+
+$('#list').addEventListener('dblclick', function (e) {
+  if (!e.target.closest('.grid th .rz')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  saveColWidths(null);
+  renderList(true);
+  toast('Column widths reset');
+});
+
 $('#list').addEventListener('click', function (e) {
+  if (e.target.closest('.grid th .rz')) { e.stopPropagation(); return; }
   const card = e.target.closest('[data-key]');
   if (!card) return;
   const key = card.getAttribute('data-key');
